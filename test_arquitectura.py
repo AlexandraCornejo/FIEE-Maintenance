@@ -7,7 +7,7 @@ sys.path.append(os.getcwd())
 
 from src.models.concretos import Osciloscopio, Multimetro, MotorInduccion
 from src.utils.enums import EstadoEquipo
-from src.interfaces.mixins import AnalizadorPredictivo, InspectorVisual
+from src.interfaces.mixins import AnalizadorPredictivo
 
 def validar_arquitectura_sistema():
     print("\n----  FIEE MAINTENANCE: VALIDACIÓN DE ARQUITECTURA ----")
@@ -33,10 +33,7 @@ def validar_arquitectura_sistema():
     print("\n[2] VERIFICACIÓN DE CAPACIDADES ESPECIALES (INTERFACES)")
     
     for equipo in flota:
-        if isinstance(equipo, InspectorVisual):
-            resultado = equipo.analizar_foto("/tmp/img_test.jpg")
-            print(f"    {equipo.modelo}: {resultado['detalles']}")
-
+       
         if isinstance(equipo, AnalizadorPredictivo):
             prediccion = equipo.predecir_fallo()
             print(f"    {equipo.modelo}: {prediccion}")
