@@ -4,7 +4,7 @@ from src.utils.enums import EstadoEquipo
 
 class Equipo(ABC):
     def __init__(self, id_activo: str, modelo: str, fecha_compra: str):
-        self._id_activo = id_activo
+        self.id_activo = id_activo
         self.modelo = modelo
         self.fecha_compra = fecha_compra
         self.estado = EstadoEquipo.OPERATIVO
@@ -26,12 +26,13 @@ class Equipo(ABC):
         pass
     
     def to_dict(self):
-        """Convierte el objeto a diccionario para Supabase"""
+        """Datos para la BD"""
         return {
-            "id": self._id_activo,
             "modelo": self.modelo,
             "fecha_compra": self.fecha_compra,
             "estado": self.estado.value,
             "tipo": self.__class__.__name__
         }
+    def __str__(self):
+        return f"[{self.__class__.__name__}] {self.modelo} (ID: {self.id_activo})"
     
