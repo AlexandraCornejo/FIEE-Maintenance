@@ -1,8 +1,7 @@
 import os
-from supabase import create_client, Client
+from supabase import create_client
 from dotenv import load_dotenv
 
-# Cargar variables de entorno
 load_dotenv()
 
 class DatabaseConnection:
@@ -12,13 +11,10 @@ class DatabaseConnection:
         if cls._instance is None:
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_KEY")
-            
-            # Verificación de seguridad para evitar errores si no hay .env
-            if not url or not key:
-                print("⚠️ [ADVERTENCIA] No se detectó archivo .env con credenciales.")
-                return None
-            
-            print("🌐 Estableciendo conexión única con Supabase...")
+            if not url: raise ValueError("Falta .env")
             cls._instance = create_client(url, key)
-        
+            print("✅ Conexión Singleton establecida") # Esto te avisará que funcionó
         return cls._instance
+
+# ESTA LÍNEA ES CLAVE: Crea el objeto "db" que usará todo el equipo
+db = DatabaseConnection()
