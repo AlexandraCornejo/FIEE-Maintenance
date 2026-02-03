@@ -1,10 +1,7 @@
 class IdentificableQR:
-    def __init__(self):
-        # Simula un hash único basado en el objeto
-        self.codigo_qr = f"QR-{id(self)}"
-    
-    def escanear_web(self) -> str:
-        return f"📡 [QR SYSTEM] Identificado activo: {self.codigo_qr}"
+    def generar_qr(self) -> str:
+        codigo= f"QR-{id(self)}"
+        return f"📡 [QR SYSTEM] Identificado activo: {codigo}"
 
 class AnalizadorPredictivo:
     def predecir_fallo(self) -> str:

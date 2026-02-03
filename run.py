@@ -1,4 +1,4 @@
-from src.models.concretos import Osciloscopio, MotorACTrifasico
+from src.models.concretos import Osciloscopio, MotorInduccion
 from src.repositories.equipo_repository import EquipoRepository
 
 if __name__ == "__main__":

@@ -1,25 +1,35 @@
 from src.models.equipo import Equipo
-from src.interfaces.mixins import IdentificableQR, AnalizadorPredictivo, InspectorVisual
+from src.interfaces.mixins import IdentificableQR, AnalizadorPredictivo
 
-# --- FÍSICA ---
-class Osciloscopio(Equipo, IdentificableQR, AnalizadorPredictivo, InspectorVisual):
+# --- TIPO 1: ELECTRÓNICA DE LABORATORIO ---
+class Osciloscopio(Equipo, IdentificableQR):
     def __init__(self, id_activo, modelo, fecha, ancho_banda):
-        Equipo.__init__(self, id_activo, modelo, fecha)
-        IdentificableQR.__init__(self)
+        super().__init__(id_activo, modelo, fecha)
         self.ancho_banda = ancho_banda
     
     def calcular_obsolescencia(self) -> float:
-        # Lógica dummy: Equipos electrónicos obsoletos a los 5 años
-        return 0.2  # 20% de desgaste simulado
+        # Lógica: 15% de desgaste base
+        return 0.15 
 
-# --- ELECTROTECNIA ---
-class MotorACTrifasico(Equipo, IdentificableQR):
-    def __init__(self, id_activo, modelo, fecha, hp, voltaje):
-        Equipo.__init__(self, id_activo, modelo, fecha)
-        IdentificableQR.__init__(self)
-        self.hp = hp
-        self.voltaje = voltaje
+# --- TIPO 2: INSTRUMENTACIÓN PORTÁTIL (¡NUEVO!) ---
+class Multimetro(Equipo, IdentificableQR):
+    def __init__(self, id_activo, modelo, fecha, precision, es_digital: bool):
+        super().__init__(id_activo, modelo, fecha)
+        self.precision = precision
+        self.es_digital = es_digital
 
     def calcular_obsolescencia(self) -> float:
-        # Lógica dummy: Motores duran más
-        return 0.05 # 5% de desgaste simulado
+        # Polimorfismo: Si es digital dura más (10%), si es viejo dura menos (30%)
+        return 0.10 if self.es_digital else 0.30
+
+# --- TIPO 3: POTENCIA Y CONTROL ---
+class MotorInduccion(Equipo, IdentificableQR, AnalizadorPredictivo):
+    def __init__(self, id_activo, modelo, fecha, hp, voltaje, rpm):
+        super().__init__(id_activo, modelo, fecha)
+        self.hp = hp
+        self.voltaje = voltaje
+        self.rpm = rpm
+
+    def calcular_obsolescencia(self) -> float:
+        # Lógica: Los motores industriales son muy duraderos (5% desgaste)
+        return 0.05
