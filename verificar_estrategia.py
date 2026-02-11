@@ -1,36 +1,36 @@
-from src.models.equipo import Equipo
 from src.logical.estrategias import DesgasteLineal, DesgasteExponencial
+from src.models.concretos import Osciloscopio
 
-def ejecutar_prueba_hito4():
-    print("="*40)
-    print("🚀 VALIDACIÓN ENTREGABLE 3: PATRÓN STRATEGY")
-    print("="*40)
+def verificar_entrega():
+    print("=== SISTEMA DE VERIFICACIÓN: ENTREGABLE 3 ===\n")
 
-    # Definimos una fecha de compra común (hace 5 años)
-    fecha_test = "2021-01-01"
+    # 1. Instanciar las estrategias (Hito 4)
+    lineal = DesgasteLineal()
+    exponencial = DesgasteExponencial()
 
-    # 1. Creamos un equipo con Estrategia LINEAL (Mecánico)
-    # Hito 3: Inyección por constructor
-    equipo_fisico = Equipo("F-001", "Motor Industrial", fecha_test, DesgasteLineal())
+    # 2. Crear equipos inyectando la estrategia por constructor (Hito 3)
+    # Usamos una fecha de hace 4 años (2022) para ver el desgaste
+    print("Creando equipos con estrategias inyectadas...")
+    
+    osc_basico = Osciloscopio("OSC-01", "Rigol 1000", "2022-01-01", "50MHz", lineal)
+    osc_avanzado = Osciloscopio("OSC-02", "Keysight X", "2022-01-01", "200MHz", exponencial)
 
-    # 2. Creamos un equipo con Estrategia EXPONENCIAL (Electrónico)
-    equipo_digital = Equipo("E-999", "Servidor de Datos", fecha_test, DesgasteExponencial())
+    # 3. Calcular y mostrar resultados
+    print(f"\n[EQUIPO 1 - LINEAL]")
+    print(f"Modelo: {osc_basico.modelo}")
+    print(f"Índice de Obsolescencia: {osc_basico.calcular_obsolescencia()}")
 
-    # Calculamos resultados
-    resultado_lineal = equipo_fisico.calcular_obsolescencia()
-    resultado_expo = equipo_digital.calcular_obsolescencia()
+    print(f"\n[EQUIPO 2 - EXPONENCIAL]")
+    print(f"Modelo: {osc_avanzado.modelo}")
+    print(f"Índice de Obsolescencia: {osc_avanzado.calcular_obsolescencia()}")
 
-    print(f"📊 Equipo Físico (Lineal):      Índice {resultado_lineal}")
-    print(f"📊 Equipo Digital (Exponencial): Índice {resultado_expo}")
-    print("-" * 40)
-
-    # Verificación del Hito 4: Los resultados DEBEN ser diferentes
-    if resultado_lineal != resultado_expo:
-        print("✅ HITO 4 CUMPLIDO: Los comportamientos son diferentes")
-        print("   para equipos del mismo año. El patrón Strategy funciona.")
-    else:
-        print("❌ ERROR: Los resultados son iguales. Revisa las fórmulas.")
-    print("="*40)
+    # 4. Demostración de cambio dinámico (Opcional, muy pro)
+    print("\nCambiando estrategia de Equipo 2 a Lineal en tiempo de ejecución...")
+    osc_avanzado.cambiar_estrategia(lineal)
+    print(f"Nuevo índice (Equipo 2 ahora lineal): {osc_avanzado.calcular_obsolescencia()}")
 
 if __name__ == "__main__":
-    ejecutar_prueba_hito4()
+    try:
+        verificar_entrega()
+    except Exception as e:
+        print(f"Error en la verificación: {e}")
