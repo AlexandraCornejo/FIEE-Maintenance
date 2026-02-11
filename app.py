@@ -5,6 +5,7 @@ import time
 import random
 from datetime import datetime
 from fpdf import FPDF
+from src.services.vision_engine import VisionService
 
 # --- CONFIGURACIÓN Y RUTAS ---
 sys.path.append(os.getcwd())
@@ -142,34 +143,42 @@ if rol == "🎓 Estudiante / Técnico":
                 with st.form("form_incidencia"):
                     usuario = st.text_input("Tu Código / Nombre", "Alumno-001")
                     desc = st.text_area("Describe la falla observada")
-                    foto = st.file_uploader("Adjuntar Foto Evidencia", type=["jpg", "png"])
+                    foto = st.camera_input("📸 Capturar evidencia en tiempo real")
                     
                     enviar = st.form_submit_button("📢 ENVIAR REPORTE")
                     
                     if enviar:
                         if desc:
-                            with st.spinner("Subiendo evidencia y analizando con IA..."):
-                                time.sleep(1.5)
-                                ia_dx = generar_dictamen_ia(desc)
+                            with st.spinner("Analizando hardware..."):
+                                # El VisionService ahora da un diagnóstico real
+                                diagnostico_visual = VisionService.analizar_integridad(foto)
                                 
+                                # ESCALAMIENTO: Si hay quemadura, cambiamos el estado del objeto POO
+                                if "CRÍTICO" in diagnostico_visual:
+                                    equipo_encontrado.estado = EstadoEquipo.REPORTADO_CON_FALLA # Usando tus Enums
+                        
+                                ia_dx = generar_dictamen_ia(desc)
+                                # Combinamos ambos diagnósticos para el reporte
+                                dictamen_final = f"{diagnostico_visual} | {ia_dx}"
+                                # ------------------------------
+                    
                                 # 1. GUARDADO
                                 equipo_encontrado.registrar_incidencia(desc, usuario)
                                 
-                                # 2. ENRIQUECIMIENTO (IA + FOTO)
+                                # 2. ENRIQUECIMIENTO
                                 ticket = equipo_encontrado.historial_incidencias[-1]
-                                ticket['dictamen_ia'] = ia_dx
+                                ticket['dictamen_ia'] = dictamen_final # <--- Ahora incluye el análisis de OpenCV
                                 ticket['foto'] = foto.name if foto else None
                                 
-                                st.success("¡Reporte enviado al sistema central!")
-                                time.sleep(1)
-                                st.rerun() # Refresca para limpiar el form
+                                st.success("¡Reporte enviado con éxito!")
+                            
                         else:
                             st.warning("⚠️ Debes describir el problema.")
         else:
             st.error("❌ Código QR no encontrado en el inventario.")
     else:
         st.info("👈 Ingrese un ID (ej: MOT-01) para comenzar.")
-
+    
 # ==========================================
 # 👨‍🏫 VISTA DOCENTE: REPORTES Y GESTIÓN
 # ==========================================
