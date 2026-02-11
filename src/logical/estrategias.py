@@ -1,37 +1,28 @@
 import math
-from abc import ABC, abstractmethod
 from datetime import datetime
+# Esta es la línea que tu compañera exige para mantener el orden
+from src.interfaces.estrategias import IEstrategiaDesgaste 
 
-# Hito 1: Definición de la Interfaz
-class EstrategiaDesgaste(ABC):
-    @abstractmethod
+class DesgasteLineal(IEstrategiaDesgaste):
+    """Implementación para equipos físicos"""
     def calcular(self, fecha_compra: str) -> float:
-        """Método que deben implementar todas las estrategias"""
-        pass
-
-    def calcular_antiguedad(self, fecha_compra: str) -> int:
-        """Calcula cuántos años han pasado desde la compra"""
-        try:
-            anio_compra = int(fecha_compra.split("-")[0])
-            anio_actual = datetime.now().year
-            # Retorna al menos 1 para evitar errores en fórmulas
-            return max(1, anio_actual - anio_compra)
-        except Exception:
-            return 1
-
-# Hito 2: Implementaciones Reales
-class DesgasteLineal(EstrategiaDesgaste):
-    """Ideal para Equipos Físicos (ej. motores)"""
-    def calcular(self, fecha_compra: str) -> float:
-        t = self.calcular_antiguedad(fecha_compra)
+        # Calculamos antigüedad
+        anio_compra = int(fecha_compra.split("-")[0])
+        anio_actual = datetime.now().year
+        t = max(1, anio_actual - anio_compra)
+        
         # Desgaste constante del 5% anual
         indice = t * 0.05
         return round(min(indice, 1.0), 2)
 
-class DesgasteExponencial(EstrategiaDesgaste):
-    """Ideal para Equipos Electrónicos (ej. servidores)"""
+class DesgasteExponencial(IEstrategiaDesgaste):
+    """Implementación para equipos electrónicos"""
     def calcular(self, fecha_compra: str) -> float:
-        t = self.calcular_antiguedad(fecha_compra)
-        # El desgaste se acelera con el tiempo usando e^x
+        # Calculamos antigüedad
+        anio_compra = int(fecha_compra.split("-")[0])
+        anio_actual = datetime.now().year
+        t = max(1, anio_actual - anio_compra)
+        
+        # El desgaste se acelera con el tiempo
         indice = (math.exp(0.2 * t) - 1) / 10
         return round(min(indice, 1.0), 2)
