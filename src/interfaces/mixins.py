@@ -1,11 +1,16 @@
-# src/interfaces/mixins.py
+import random
 
 class IdentificableQR:
-    def generar_qr(self):
-        """Hito 1: Generación de identificador único"""
-        return f"QR-{id(self)}"
+    def generar_qr(self) -> str:
+        codigo = f"QR-{id(self)}"
+        return f"📡 [QR SYSTEM] Identificado activo: {codigo}"
 
 class AnalizadorPredictivo:
-    def predecir_fallo(self):
-        """Hito 3: Simulación de probabilidad de falla con IA"""
-        return "🔮 IA: Probabilidad de fallo 12%"
+    def predecir_fallo(self) -> str:
+        probabilidad = random.randint(15, 85)
+        return f"🔮 [IA] Probabilidad de fallo: {probabilidad}% (Vibración anómala detectada)"
+
+class InspectorVisual:
+    def analizar_foto(self, ruta_imagen: str) -> dict:
+        # Simulamos procesamiento de imagen
+        return {"status": "OK", "detalles": "Lente frontal limpio, sin grietas visibles."}
