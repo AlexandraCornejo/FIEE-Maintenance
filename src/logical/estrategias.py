@@ -3,25 +3,23 @@ from datetime import datetime
 from src.interfaces.estrategias import IEstrategiaDesgaste 
 
 class DesgasteLineal(IEstrategiaDesgaste):
-    """Implementación para equipos físicos (Motores, Maquinaria)"""
+    """Implementación para equipos con desgaste constante (Hito 3)"""
     def calcular(self, fecha_compra: str) -> float:
-        # 1. Calculamos antigüedad en años
         anio_compra = int(fecha_compra.split("-")[0])
         anio_actual = datetime.now().year
         t = max(1, anio_actual - anio_compra)
         
-        # 2. Fórmula: Desgaste constante del 5% anual
+        # 5% de desgaste anual fijo
         indice = t * 0.05
         return round(min(indice, 1.0), 2)
 
 class DesgasteExponencial(IEstrategiaDesgaste):
-    """Implementación para equipos electrónicos (Laptops, Servidores)"""
+    """Implementación para equipos electrónicos con obsolescencia rápida"""
     def calcular(self, fecha_compra: str) -> float:
-        # 1. Calculamos antigüedad en años
         anio_compra = int(fecha_compra.split("-")[0])
         anio_actual = datetime.now().year
         t = max(1, anio_actual - anio_compra)
         
-        # 2. Fórmula: El desgaste aumenta más rápido cada año
+        # El desgaste crece exponencialmente
         indice = (math.exp(0.2 * t) - 1) / 10
         return round(min(indice, 1.0), 2)
