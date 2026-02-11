@@ -12,7 +12,7 @@ class DesgasteLineal(IEstrategiaDesgaste):
         return round(min(t * 0.05, 1.0), 2)
 
 class DesgasteExponencial(IEstrategiaDesgaste):
-    """Implementación para equipos electrónicos con obsolescencia rápida"""
+    """Implementación AGRESIVA para ver la diferencia en la Demo"""
     def calcular(self, fecha_compra: str) -> float:
         anio_compra = int(fecha_compra.split("-")[0])
         anio_actual = datetime.now().year

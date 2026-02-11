@@ -1,12 +1,23 @@
 from datetime import datetime
+import sys
+import os
+
+# Agregamos la ruta raíz para evitar errores de importación
+sys.path.append(os.getcwd())
+
 from src.utils.enums import EstadoEquipo
-from src.interfaces.estrategias import IEstrategiaDesgaste
+# Si tienes problemas importando la interfaz, puedes comentar la siguiente línea
+# y quitar el ": IEstrategiaDesgaste" de los argumentos.
+try:
+    from src.interfaces.estrategias import IEstrategiaDesgaste
+except ImportError:
+    IEstrategiaDesgaste = object # Fallback para que no rompa si falla el import
 
 class Equipo:
-    def __init__(self, id_activo: str, modelo: str, fecha_compra: str, estrategia: IEstrategiaDesgaste):
+    def __init__(self, id_activo: str, modelo: str, fecha_compra: str, estrategia):
         """
-        Constructor que implementa el Patrón Strategy (Hito 3).
-        Recibe una instancia de la estrategia de desgaste.
+        Constructor que implementa el Patrón Strategy.
+        :param estrategia: Instancia de DesgasteLineal o DesgasteExponencial
         """
         self.id_activo = id_activo
         self.modelo = modelo
@@ -14,20 +25,35 @@ class Equipo:
         self.estado = EstadoEquipo.OPERATIVO
         self.historial_incidencias = []
         
-        # Guardamos la estrategia inyectada
+        # --- CLAVE DEL PATRÓN STRATEGY ---
+        # Guardamos el algoritmo (objeto) dentro del equipo
         self.estrategia_desgaste = estrategia
-
+        
     def calcular_obsolescencia(self) -> float:
-        """
-        Delega el cálculo a la estrategia asignada.
-        """
-        if not self.estrategia_desgaste:
+        # 1. Validación de estrategia (La que ya tienes)
+        if not hasattr(self, 'estrategia_desgaste') or self.estrategia_desgaste is None:
             return 0.0
-        return self.estrategia_desgaste.calcular(self.fecha_compra)
+            
+        # 2. Tu cálculo matemático (El que usa tu compañera)
+        valor_teorico = self.estrategia_desgaste.calcular(self.fecha_compra)
 
-    def cambiar_estrategia(self, nueva_estrategia: IEstrategiaDesgaste):
+        # 3. PROTECCIÓN PARA TU COMPAÑERA:
+        # Usamos .get() y verificamos que la lista exista para que no de error
+        # si ella creó un equipo "vacío" para sus pruebas.
+        historial = getattr(self, 'historial_incidencias', [])
+        
+        if historial: 
+            ultimo_ticket = historial[-1]
+            dictamen_ia = str(ultimo_ticket.get('dictamen_ia', '')).upper()
+            
+            if "ALERTA" in dictamen_ia or "CARBONIZADA" in dictamen_ia:
+                return 0.98
+
+        return min(valor_teorico, 1.0)
+
+    def cambiar_estrategia(self, nueva_estrategia):
         """
-        Permite cambiar la lógica de cálculo en tiempo de ejecución.
+        Permite cambiar la estrategia de cálculo en tiempo de ejecución.
         """
         self.estrategia_desgaste = nueva_estrategia
 
