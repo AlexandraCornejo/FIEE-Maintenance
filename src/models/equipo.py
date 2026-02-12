@@ -6,8 +6,7 @@ import os
 sys.path.append(os.getcwd())
 
 from src.utils.enums import EstadoEquipo
-# Si tienes problemas importando la interfaz, puedes comentar la siguiente línea
-# y quitar el ": IEstrategiaDesgaste" de los argumentos.
+
 try:
     from src.interfaces.estrategias import IEstrategiaDesgaste
 except ImportError:
@@ -25,21 +24,12 @@ class Equipo:
         self.estado = EstadoEquipo.OPERATIVO
         self.historial_incidencias = []
         
-        # --- CLAVE DEL PATRÓN STRATEGY ---
-        # Guardamos el algoritmo (objeto) dentro del equipo
         self.estrategia_desgaste = estrategia
-        
+
     def calcular_obsolescencia(self) -> float:
-        # 1. Validación de estrategia (La que ya tienes)
         if not hasattr(self, 'estrategia_desgaste') or self.estrategia_desgaste is None:
             return 0.0
-            
-        # 2. Tu cálculo matemático (El que usa tu compañera)
         valor_teorico = self.estrategia_desgaste.calcular(self.fecha_compra)
-
-        # 3. PROTECCIÓN PARA TU COMPAÑERA:
-        # Usamos .get() y verificamos que la lista exista para que no de error
-        # si ella creó un equipo "vacío" para sus pruebas.
         historial = getattr(self, 'historial_incidencias', [])
         
         if historial: 
