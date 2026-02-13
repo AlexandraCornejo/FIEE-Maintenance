@@ -69,4 +69,4 @@ def mostrar_dashboard():
     # Botón de recarga manual
     if st.button("🔄 Actualizar Datos"):
         st.cache_data.clear()
-        st.rerun()
+        st.rerun() 
