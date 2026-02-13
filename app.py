@@ -6,6 +6,7 @@ import random
 import numpy as np
 from datetime import datetime
 from fpdf import FPDF
+from src.services.vision_engine import VisionService
 
 # --- CONFIGURACIÓN INICIAL ---
 sys.path.append(os.getcwd())
