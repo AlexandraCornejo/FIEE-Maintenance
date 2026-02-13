@@ -4,41 +4,45 @@ import numpy as np
 class VisionService:
     def analizar_quemadura(self, image_path_or_buffer):
         """
-        Versión V2: Detecta porcentaje de oscuridad en lugar de promedio simple.
-        Ideal para detectar objetos negros aunque el fondo sea claro.
+        Versión V2.2: Con bandera booleana para evitar confusiones en el Dashboard.
         """
         try:
+            # 1. Cargar la imagen (Tu lógica original)
             if hasattr(image_path_or_buffer, 'read'): 
+                # Resetear el puntero del archivo por si acaso se leyó antes
+                image_path_or_buffer.seek(0)
                 file_bytes = np.asarray(bytearray(image_path_or_buffer.read()), dtype=np.uint8)
                 img = cv2.imdecode(file_bytes, 1)
             else:
                 img = cv2.imread(image_path_or_buffer)
 
             if img is None:
-                return {"alerta": "ERROR", "diagnostico": "Img corrupta", "brillo_detectado": 0}
+                return {"alerta": "ERROR", "diagnostico": "Imagen no legible", "es_critico": False}
 
+            # 2. Procesamiento (Tu lógica original)
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-            umbral_oscuridad = 60
+            
+            # Umbral ajustado a 45 como pediste
+            umbral_oscuridad = 45 
             
             pixeles_totales = gray.size
             pixeles_oscuros = np.count_nonzero(gray < umbral_oscuridad)
             
             porcentaje_quemado = (pixeles_oscuros / pixeles_totales) * 100
 
-    
-            if porcentaje_quemado > 10.0:
+            # 3. Decisión (AQUÍ ESTÁ LA CLAVE)
+            if porcentaje_quemado > 25.0:
                 return {
                     "alerta": "🚨 ALERTA CRÍTICA",
-                    "diagnostico": f"Zona CARBONIZADA detectada ({porcentaje_quemado:.1f}% de área afectada).",
-                    "brillo_detectado": f"Área oscura: {porcentaje_quemado:.1f}%"
+                    "diagnostico": f"Zona CARBONIZADA detectada ({porcentaje_quemado:.1f}%).",
+                    "es_critico": True  # <--- ESTO ES LO QUE NECESITAMOS (SEMÁFORO ROJO)
                 }
             else:
                 return {
-                    "alerta": "✅ OK",
-                    "diagnostico": "Superficie dentro de parámetros normales.",
-                    "brillo_detectado": f"Área oscura: {porcentaje_quemado:.1f}%"
+                    "alerta": "✅ ESTADO NORMAL",
+                    "diagnostico": f"Superficie limpia ({porcentaje_quemado:.1f}% oscuridad).",
+                    "es_critico": False # <--- ESTO ES LO QUE NECESITAMOS (SEMÁFORO VERDE)
                 }
 
         except Exception as e:
-            return {"alerta": "ERROR", "diagnostico": f"Fallo IA: {str(e)}", "brillo_detectado": 0}
+            return {"alerta": "ERROR", "diagnostico": f"Fallo IA: {str(e)}", "es_critico": False}

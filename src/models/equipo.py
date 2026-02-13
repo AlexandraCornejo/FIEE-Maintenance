@@ -23,22 +23,39 @@ class Equipo:
         self.fecha_compra = fecha_compra
         self.estado = EstadoEquipo.OPERATIVO
         self.historial_incidencias = []
-        
         self.estrategia_desgaste = estrategia
 
     def calcular_obsolescencia(self) -> float:
+        """
+        Calcula el desgaste considerando la estrategia matemática, 
+        el historial de la IA y el estado de baja.
+        """
+        # 1. Caso base: Sin estrategia
         if not hasattr(self, 'estrategia_desgaste') or self.estrategia_desgaste is None:
             return 0.0
+            
+        # 2. Cálculo matemático inicial (por tiempo)
         valor_teorico = self.estrategia_desgaste.calcular(self.fecha_compra)
-        historial = getattr(self, 'historial_incidencias', [])
         
+        # 3. Verificación de Seguridad: Estado de Baja
+        # Si el equipo ya está marcado como de baja (por la IA o manual), forzamos el 1.0
+        estado_str = str(self.estado.value).upper() if hasattr(self.estado, 'value') else str(self.estado).upper()
+        if "BAJA" in estado_str:
+            return 1.0
+
+        # 4. Verificación de Seguridad: Historial de IA
+        historial = getattr(self, 'historial_incidencias', [])
         if historial: 
             ultimo_ticket = historial[-1]
-            dictamen_ia = str(ultimo_ticket.get('dictamen_ia', '')).upper()
+            # Revisamos tanto el detalle como el dictamen de la IA
+            texto_analisis = (str(ultimo_ticket.get('dictamen_ia', '')) + 
+                             str(ultimo_ticket.get('detalle', ''))).upper()
             
-            if "ALERTA" in dictamen_ia or "CARBONIZADA" in dictamen_ia:
-                return 0.98
+            # Si hay cualquier rastro de daño crítico en el último reporte
+            if any(palabra in texto_analisis for palabra in ["ALERTA", "CARBONIZADA", "CRITICO", "QUEMADO"]):
+                return 0.98 # Lo dejamos casi al tope para que se vea rojo
 
+        # 5. Si todo está bien, devolvemos el valor teórico sin pasar del 100%
         return min(valor_teorico, 1.0)
 
     def cambiar_estrategia(self, nueva_estrategia):
