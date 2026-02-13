@@ -160,7 +160,7 @@ class VistaDashboard(Vista):
                             "dictamen_ia": res['diagnostico']
                         }
                         equipo_sel.historial_incidencias.append(nuevo_reporte)
-                        if res.get('es_critico'): equipo_sel.estado = EstadoEquipo.DE_BAJA
+                        if res.get('es_critico'): equipo_sel.estado = EstadoEquipo.BAJA
                         
                         # Guardado explícito
                         st.session_state.db_laboratorios[filtro_lab][idx_sel] = equipo_sel
