@@ -37,8 +37,6 @@ if 'db_laboratorios' not in st.session_state:
         ],
         
         "Laboratorio de Circuitos": [
-            # Multimetro: (id, modelo, fecha, precision, es_digital, estrategia)
-            # ¡Aquí estaba el error! Faltaba el True/False
             Multimetro("MUL-01", "Fluke 87V", "2022-02-01", "0.05%", True, st.session_state.est_lineal),
             Multimetro("MUL-02", "Uni-T UT61E", "2020-08-15", "0.1%", True, st.session_state.est_expo),
         ]
