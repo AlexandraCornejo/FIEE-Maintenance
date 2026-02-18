@@ -36,15 +36,13 @@ def obtener_comentario_estado(obs_val, estado_str):
     elif obs_val < 0.8: return "🟠 Desgaste avanzado."
     else: return "🔴 CRÍTICO: Riesgo inminente."
 
-# Quitamos cache_data temporalmente para evitar errores de hashing con objetos complejos
 def convertir_objetos_a_df(_lista_equipos_dict, _trigger): 
     data = []
-    # VALIDACIÓN DE SEGURIDAD: Si no es dict, retornar vacío para no romper la app
     if not _lista_equipos_dict or not isinstance(_lista_equipos_dict, dict): 
         return pd.DataFrame()
 
     for lab_nombre, lista_equipos in _lista_equipos_dict.items():
-        if not isinstance(lista_equipos, list): continue # Seguridad extra
+        if not isinstance(lista_equipos, list): continue 
         for eq in lista_equipos:
             obs_num = eq.calcular_obsolescencia()
             estado_actual = eq.estado.name if hasattr(eq.estado, 'name') else str(eq.estado)
@@ -60,16 +58,52 @@ def convertir_objetos_a_df(_lista_equipos_dict, _trigger):
             })
     return pd.DataFrame(data)
 
+# --- CAMBIO 1: Función PDF Profesional (inyectada aquí) ---
 def generar_pdf(equipo, lab):
     pdf = FPDF()
     pdf.add_page()
+    
+    # TÍTULO
     pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, f'REPORTE TECNICO: {equipo.modelo}', 0, 1, 'C')
-    pdf.ln(10)
-    pdf.set_font('Arial', '', 12)
-    pdf.cell(0, 10, f"ID: {equipo.id_activo} | Ubicacion: {lab}", 0, 1)
-    pdf.cell(0, 10, f"Desgaste Calculado: {equipo.calcular_obsolescencia()*100:.2f}%", 0, 1)
-    return pdf.output(dest='S').encode('latin-1')
+    pdf.cell(0, 10, f'FICHA TECNICA: {equipo.modelo}', 0, 1, 'C')
+    pdf.ln(5)
+
+    # INFO GENERAL
+    pdf.set_font('Arial', '', 11)
+    pdf.cell(0, 8, f"ID Activo: {equipo.id_activo}", 0, 1)
+    pdf.cell(0, 8, f"Ubicacion: {lab}", 0, 1)
+    pdf.cell(0, 8, f"Fecha Compra: {equipo.fecha_compra}", 0, 1)
+    pdf.cell(0, 8, f"Estado Actual: {equipo.estado.name}", 0, 1)
+    
+    # RESULTADOS
+    obs = equipo.calcular_obsolescencia()
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(0, 8, f"Nivel de Desgaste Calculado: {obs*100:.2f}%", 0, 1)
+    pdf.ln(5)
+    
+    # HISTORIAL
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Historial de Mantenimiento e Incidencias:", 0, 1)
+    pdf.set_font('Arial', '', 10)
+    
+    if equipo.historial_incidencias:
+        for inc in equipo.historial_incidencias:
+            fecha = inc.get('fecha', '-')
+            # Limpieza de caracteres (emojis) para evitar crash
+            texto = inc.get('detalle', '-').encode('latin-1', 'ignore').decode('latin-1')
+            dictamen = inc.get('dictamen_ia', '')
+            
+            pdf.multi_cell(0, 6, f"[{fecha}] {texto}")
+            if dictamen:
+                dic_clean = dictamen.encode('latin-1', 'ignore').decode('latin-1')
+                pdf.set_font('Arial', 'I', 9)
+                pdf.multi_cell(0, 6, f"   >> Dictamen IA: {dic_clean}")
+                pdf.set_font('Arial', '', 10)
+            pdf.ln(2)
+    else:
+        pdf.cell(0, 10, "Sin registros de mantenimiento.", 0, 1)
+
+    return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # ==============================================================================
 # 2. VISTA DASHBOARD
@@ -84,10 +118,9 @@ class VistaDashboard(Vista):
         laboratorios_dict = {
             "Laboratorio de Control": [], "Laboratorio de Circuitos": [],
             "Laboratorio de Máquinas": [], "Laboratorio de Telecom": [],
-            "Laboratorio FIEE": [] # Agregado por seguridad
+            "Laboratorio FIEE": [] 
         } 
         
-        # Recuperar estrategias o crear nuevas
         est_lineal = st.session_state.get('est_lineal', DesgasteLineal())
         est_expo = st.session_state.get('est_expo', DesgasteExponencial())
 
@@ -98,7 +131,7 @@ class VistaDashboard(Vista):
                 tipo = d.get('tipo_equipo', 'Equipo')
                 ubicacion = d.get('ubicacion', 'Laboratorio FIEE')
                 
-                # Auto-Corrección de ubicación si viene genérica
+                # Auto-Corrección
                 if ubicacion == "Laboratorio FIEE":
                     if "Motor" in tipo: ubicacion = "Laboratorio de Máquinas"
                     elif "Osciloscopio" in tipo: ubicacion = "Laboratorio de Circuitos"
@@ -132,8 +165,11 @@ class VistaDashboard(Vista):
                     nuevo_obj.ubicacion = ubicacion 
                     if ubicacion not in laboratorios_dict: laboratorios_dict[ubicacion] = []
                     laboratorios_dict[ubicacion].append(nuevo_obj)
-            except Exception: continue     
-        return {k: v for k, v in laboratorios_dict.items() if len(v) > 0}
+            except Exception: continue
+        
+        # CAMBIO 2: NO borramos los vacíos aquí, para que funcione el menú de "Alta Inventario".
+        # Los filtraremos visualmente en la tabla.
+        return laboratorios_dict
 
     def render(self):
         st.title("📊 Dashboard de Activos FIEE")
@@ -143,57 +179,58 @@ class VistaDashboard(Vista):
         if 'est_lineal' not in st.session_state: st.session_state.est_lineal = DesgasteLineal()
         if 'est_expo' not in st.session_state: st.session_state.est_expo = DesgasteExponencial()
 
-        # --- CORRECCIÓN CRÍTICA ---
-        # Verificamos si la base de datos está corrupta (es una lista en vez de dict)
         es_lista_erronea = ('db_laboratorios' in st.session_state and not isinstance(st.session_state.db_laboratorios, dict))
         
-        # Si no existe, o si hay trigger, O SI ESTÁ DAÑADA, recargamos
         if 'db_laboratorios' not in st.session_state or st.session_state.trigger > 0 or es_lista_erronea:
             st.session_state.db_laboratorios = self._cargar_y_agrupar_desde_supabase()
             st.session_state.trigger = 0 
 
-        # PESTAÑAS
         tab_tabla, tab_detalle, tab_recup, tab_alta = st.tabs([
             "📋 Inventario", "⚙️ Gestión Técnica", "🚑 Recuperación", "➕ Alta Inventario"
         ])
 
         # 1. TABLA GENERAL
         with tab_tabla:
-            labs = list(st.session_state.db_laboratorios.keys())
+            # CAMBIO 3: Lógica "Ver Todos" y filtro de vacíos visual
+            labs_con_datos = [k for k, v in st.session_state.db_laboratorios.items() if len(v) > 0]
             
-            if labs:
-                # Agregamos la opción mágica al principio
-                opciones = ["🔍 VER TODOS"] + labs
-                filtro_lab = st.selectbox("Laboratorio:", opciones)
+            if labs_con_datos:
+                opciones = ["🔍 VER TODOS"] + labs_con_datos
+                filtro_lab = st.selectbox("Filtrar por Ubicación:", opciones)
                 
                 df = convertir_objetos_a_df(st.session_state.db_laboratorios, st.session_state.trigger)
                 
                 if not df.empty:
                     df_show = df.drop(columns=["OBJ_REF"])
                     
-                    # Solo filtramos si NO eligieron "VER TODOS"
+                    # Si no es "VER TODOS", filtramos
                     if filtro_lab != "🔍 VER TODOS":
                         df_show = df_show[df_show["Ubicación"] == filtro_lab]
                     
                     st.dataframe(df_show, use_container_width=True, hide_index=True)
+                    st.caption(f"Mostrando {len(df_show)} registros.")
                 else:
                     st.info("No hay equipos registrados.")
             else:
-                st.warning("No hay datos cargados.")
+                st.warning("No hay datos cargados (Inventario Vacío). Ve a la pestaña 'Alta Inventario' para comenzar.")
 
         # 2. GESTIÓN TÉCNICA
         with tab_detalle:
-            if filtro_lab and st.session_state.db_laboratorios.get(filtro_lab):
-                equipo_list = st.session_state.db_laboratorios[filtro_lab]
+            # Filtrar dropdown para mostrar solo labs con cosas
+            labs_con_datos = [k for k, v in st.session_state.db_laboratorios.items() if len(v) > 0]
+            
+            if labs_con_datos:
+                sel_lab_gestion = st.selectbox("Seleccionar Laboratorio:", labs_con_datos, key="sel_gest")
+                equipo_list = st.session_state.db_laboratorios[sel_lab_gestion]
+                
                 idx = st.selectbox("Seleccionar Activo:", range(len(equipo_list)), 
-                                 format_func=lambda i: f"{equipo_list[i].modelo} ({equipo_list[i].id_activo})")
+                                    format_func=lambda i: f"{equipo_list[i].modelo} ({equipo_list[i].id_activo})")
                 eq_sel = equipo_list[idx]
                 
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     st.info(f"Estado: **{eq_sel.estado.name}**")
                     
-                    # --- SECCIÓN IA ---
                     st.markdown("#### 🤖 Inspección Visual")
                     img = st.file_uploader("Subir foto daño:", type=['jpg','png'], key=f"ia_{eq_sel.id_activo}")
                     if img and st.button("Analizar", key=f"btn_ia_{eq_sel.id_activo}"):
@@ -208,14 +245,13 @@ class VistaDashboard(Vista):
                         st.session_state.trigger = 1
                         st.rerun()
 
-                    # --- SECCIÓN ESTRATEGIA ---
                     st.markdown("---")
                     st.markdown("#### 🧠 Algoritmo de Desgaste")
                     est_actual_nombre = type(eq_sel.estrategia_desgaste).__name__
                     
                     modo_sel = st.radio("Modelo Matemático:", ["Lineal", "Exponencial"],
-                                      index=0 if "Lineal" in est_actual_nombre else 1,
-                                      horizontal=True, key=f"rad_{eq_sel.id_activo}")
+                                        index=0 if "Lineal" in est_actual_nombre else 1,
+                                        horizontal=True, key=f"rad_{eq_sel.id_activo}")
                     
                     if st.button("🔄 Actualizar Cálculo", key=f"btn_calc_{eq_sel.id_activo}"):
                         nueva_est = st.session_state.est_lineal if modo_sel == "Lineal" else st.session_state.est_expo
@@ -231,11 +267,20 @@ class VistaDashboard(Vista):
                     st.metric("Nivel de Desgaste", f"{obs*100:.1f}%")
                     st.progress(min(obs, 1.0))
                     
+                    # --- CAMBIO 4: BOTÓN PDF ---
+                    st.write("")
+                    if st.button("📄 Generar Reporte PDF", key=f"pdf_{eq_sel.id_activo}"):
+                        pdf_bytes = generar_pdf(eq_sel, eq_sel.ubicacion)
+                        st.download_button("⬇️ Descargar PDF", pdf_bytes, file_name=f"Reporte_{eq_sel.id_activo}.pdf", mime="application/pdf")
+                    # ---------------------------
+
                     with st.expander("Historial de Eventos", expanded=True):
                         for inc in eq_sel.historial_incidencias:
                             st.caption(f"{inc.get('fecha')} | {inc.get('detalle')}")
                             if 'dictamen_ia' in inc: st.code(inc['dictamen_ia'])
                             st.divider()
+            else:
+                st.info("No hay equipos para gestionar.")
 
         # 3. ZONA DE RECUPERACIÓN
         with tab_recup:
@@ -268,36 +313,34 @@ class VistaDashboard(Vista):
         # 4. ALTA INVENTARIO
         with tab_alta:
             st.subheader("➕ Nuevo Ingreso")
-            labs_keys = list(st.session_state.db_laboratorios.keys()) if isinstance(st.session_state.db_laboratorios, dict) else []
+            # Lista fija para asegurar que siempre haya opciones, incluso si la BD está vacía
+            LABS_POSIBLES = ["Laboratorio de Control", "Laboratorio de Circuitos", "Laboratorio de Máquinas", "Laboratorio de Telecom", "Laboratorio FIEE"]
             
-            if labs_keys:
-                c_lab, c_tipo = st.columns(2)
-                lab_dest = c_lab.selectbox("Destino:", labs_keys)
+            c_lab, c_tipo = st.columns(2)
+            lab_dest = c_lab.selectbox("Destino:", LABS_POSIBLES)
+            
+            opts = ["Otro / Genérico"]
+            if lab_dest == "Laboratorio de Máquinas": opts = ["MotorInduccion"] + opts
+            elif lab_dest == "Laboratorio de Circuitos": opts = ["Osciloscopio"] + opts
+            elif lab_dest == "Laboratorio de Control": opts = ["Multimetro"] + opts
+            
+            tipo_sel = c_tipo.selectbox("Tipo:", opts, key=f"t_{lab_dest}")
+            
+            with st.form("alta"):
+                m = st.text_input("Modelo")
+                f = st.date_input("Fecha")
+                extra = st.text_input("Detalle Extra") if "Genérico" in tipo_sel else ""
                 
-                opts = ["Otro / Genérico"]
-                if lab_dest == "Laboratorio de Máquinas": opts = ["MotorInduccion"] + opts
-                elif lab_dest == "Laboratorio de Circuitos": opts = ["Osciloscopio"] + opts
-                elif lab_dest == "Laboratorio de Control": opts = ["Multimetro"] + opts
-                
-                tipo_sel = c_tipo.selectbox("Tipo:", opts, key=f"t_{lab_dest}")
-                
-                with st.form("alta"):
-                    m = st.text_input("Modelo")
-                    f = st.date_input("Fecha")
-                    extra = st.text_input("Detalle Extra") if "Genérico" in tipo_sel else ""
+                if st.form_submit_button("Guardar"):
+                    nid = f"EQ-{random.randint(1000,9999)}"
+                    f_s = f.strftime("%Y-%m-%d")
+                    new = None
+                    if "Motor" in tipo_sel: new = MotorInduccion(nid, m, f_s, "5HP", "220V", 1800, st.session_state.est_lineal)
+                    elif "Osciloscopio" in tipo_sel: new = Osciloscopio(nid, m, f_s, "100MHz", st.session_state.est_lineal)
+                    elif "Multimetro" in tipo_sel: new = Multimetro(nid, m, f_s, "1%", True, st.session_state.est_lineal)
+                    else: new = EquipoGenerico(nid, m, f_s, extra, st.session_state.est_lineal)
                     
-                    if st.form_submit_button("Guardar"):
-                        nid = f"EQ-{random.randint(1000,9999)}"
-                        f_s = f.strftime("%Y-%m-%d")
-                        new = None
-                        if "Motor" in tipo_sel: new = MotorInduccion(nid, m, f_s, "5HP", "220V", 1800, st.session_state.est_lineal)
-                        elif "Osciloscopio" in tipo_sel: new = Osciloscopio(nid, m, f_s, "100MHz", st.session_state.est_lineal)
-                        elif "Multimetro" in tipo_sel: new = Multimetro(nid, m, f_s, "1%", True, st.session_state.est_lineal)
-                        else: new = EquipoGenerico(nid, m, f_s, extra, st.session_state.est_lineal)
-                        
-                        new.ubicacion = lab_dest
-                        EquipoRepository().guardar_equipo(new)
-                        st.session_state.trigger = 1
-                        st.rerun()
-            else:
-                st.error("No se pueden cargar laboratorios para dar de alta.")
+                    new.ubicacion = lab_dest
+                    EquipoRepository().guardar_equipo(new)
+                    st.session_state.trigger = 1
+                    st.rerun()
