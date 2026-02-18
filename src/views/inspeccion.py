@@ -3,13 +3,12 @@ import time
 import os
 from src.views.base_view import Vista
 from src.utils.enums import EstadoEquipo
+from src.repositories.equipo_repository import EquipoRepository # <--- NUEVO
 
-# Intentamos importar el servicio de visión de forma segura
-# Si no existe el archivo, no romperá la app, solo avisará.
 try:
     from src.services.vision_service import VisionService
 except ImportError:
-    VisionService = None # Marcamos que no está disponible
+    VisionService = None
 
 class VistaInspeccion(Vista):
     def render(self):
@@ -22,7 +21,7 @@ class VistaInspeccion(Vista):
         equipo_encontrado = None
         lab_ubicacion = None
 
-        # Buscamos el equipo en la base de datos global
+        # Buscamos el equipo en la base de datos global (Ya cargada de Supabase)
         if qr_input and 'db_laboratorios' in st.session_state:
             for lab, lista_equipos in st.session_state.db_laboratorios.items():
                 for eq in lista_equipos:
@@ -35,11 +34,9 @@ class VistaInspeccion(Vista):
         if equipo_encontrado:
             st.success(f"✅ Equipo Identificado: {equipo_encontrado.modelo}")
             
-            # Tarjeta de información rápida
             with st.container(border=True):
                 c1, c2 = st.columns([1, 3])
                 with c1:
-                    # Icono según tipo
                     if "Motor" in type(equipo_encontrado).__name__:
                          st.image("https://cdn-icons-png.flaticon.com/512/3662/3662819.png", width=80)
                     else:
@@ -48,8 +45,6 @@ class VistaInspeccion(Vista):
                 with c2:
                     st.write(f"**📍 Ubicación:** {lab_ubicacion}")
                     st.write(f"**🚦 Estado:** {equipo_encontrado.estado.value}")
-                    
-                    # Barra de vida útil
                     obs = equipo_encontrado.calcular_obsolescencia()
                     vida_restante = max(0, 1.0 - obs)
                     st.progress(vida_restante, text=f"Vida Útil Restante: {vida_restante*100:.1f}%")
@@ -62,10 +57,8 @@ class VistaInspeccion(Vista):
             with st.form("form_reporte"):
                 usuario = st.text_input("Tu Nombre / Código:", "Estudiante-01")
                 descripcion = st.text_area("Descripción del problema:", placeholder="El equipo hace un ruido extraño...")
-                
                 st.write("📸 **Evidencia Visual (Opcional)**")
                 col_cam, col_upload = st.columns(2)
-                
                 foto_cam = col_cam.camera_input("Tomar Foto")
                 foto_upl = col_upload.file_uploader("Subir Imagen", type=["jpg", "png", "jpeg"])
                 
@@ -75,63 +68,52 @@ class VistaInspeccion(Vista):
                     if not descripcion:
                         st.warning("⚠️ Por favor describe el problema.")
                     else:
-                        # Procesar la imagen (si existe)
                         foto_final = foto_cam if foto_cam else foto_upl
                         dictamen_ia = "Sin análisis visual."
 
-                        # --- BLOQUE DE SEGURIDAD (TRY/EXCEPT) PARA VISIÓN ---
+                        # --- BLOQUE VISIÓN ---
                         if foto_final:
                             with st.spinner("🤖 Analizando imagen con IA..."):
-                                time.sleep(1.5) # Simular tiempo de proceso
-                                
-                                # Guardar temporalmente
+                                time.sleep(1.5)
                                 temp_filename = "temp_vision.jpg"
-                                with open(temp_filename, "wb") as f:
-                                    f.write(foto_final.getbuffer())
+                                with open(temp_filename, "wb") as f: f.write(foto_final.getbuffer())
                                 
                                 try:
-                                    # Intentamos usar el servicio REAL
                                     if VisionService:
                                         servicio = VisionService()
-                                        # Adaptador: Probamos métodos comunes por si cambiaron el nombre
                                         if hasattr(servicio, 'analizar_quemadura'):
                                             resultado = servicio.analizar_quemadura(temp_filename)
                                         elif hasattr(servicio, 'analizar_imagen'):
                                             resultado = servicio.analizar_imagen(temp_filename)
                                         else:
-                                            # Si no encontramos el método, simulamos respuesta
                                             resultado = {"diagnostico": "Error de Método", "alerta": False}
                                         
                                         dictamen_ia = f"IA: {resultado.get('diagnostico', 'Desconocido')}"
                                         
-                                        # Si la IA detecta alerta grave, cambiamos estado automáticamente
                                         if resultado.get('alerta') or "QUEMADURA" in str(resultado):
                                             equipo_encontrado.estado = EstadoEquipo.EN_MANTENIMIENTO
-                                            st.error("🚨 ¡LA IA DETECTÓ DAÑO CRÍTICO! El estado ha cambiado a Mantenimiento.")
+                                            st.error("🚨 ¡LA IA DETECTÓ DAÑO CRÍTICO!")
                                     else:
-                                        # MODO SIMULACRO (Si no hay archivo de visión)
                                         dictamen_ia = "IA (Simulada): Posible desgaste térmico detectado."
                                 
                                 except Exception as e:
                                     dictamen_ia = f"Error en IA: {str(e)}"
                                 finally:
-                                    # Limpieza
-                                    if os.path.exists(temp_filename):
-                                        os.remove(temp_filename)
+                                    if os.path.exists(temp_filename): os.remove(temp_filename)
 
-                        # --- GUARDADO FINAL ---
-                        # 1. Crear el texto del reporte
+                        # --- GUARDADO ---
                         detalle_log = f"Reportado por {usuario}: {descripcion}"
-                        
-                        # 2. Registrar en el objeto (¡ESTO ES LO QUE LLENA EL PDF!)
                         equipo_encontrado.registrar_incidencia(detalle_log)
-                        
-                        # 3. Añadimos el dictamen de la IA al último registro
                         ultimo_ticket = equipo_encontrado.historial_incidencias[-1]
                         ultimo_ticket['dictamen_ia'] = dictamen_ia
 
-                        st.success("✅ Reporte registrado exitosamente en el sistema.")
-                        st.info(f"Resultado del análisis: {dictamen_ia}")
+                        # --- PERSISTENCIA SUPABASE ---
+                        repo = EquipoRepository()
+                        repo.actualizar_equipo(equipo_encontrado) # <--- AQUÍ GUARDAMOS
+
+                        st.success("✅ Reporte registrado y guardado en la Nube.")
+                        st.session_state.trigger = st.session_state.get('trigger', 0) + 1
+                        st.cache_data.clear()
                         
         elif qr_input:
             st.error("❌ Código QR no encontrado en la base de datos.")
