@@ -15,14 +15,22 @@ class VistaInspeccion(Vista):
         st.header("📲 Inspección Técnica (Estudiante)")
         st.markdown("---")
 
+        # --- CARGA AUTÓNOMA DE DATOS ---
+        # Si el estudiante entra directo y la BD no está cargada, la descargamos.
+        if 'db_laboratorios' not in st.session_state or not isinstance(st.session_state.db_laboratorios, dict):
+            from src.views.dashboard import VistaDashboard
+            st.session_state.db_laboratorios = VistaDashboard()._cargar_y_agrupar_desde_supabase()
+            st.session_state.trigger = 0
+        # -------------------------------
+
         # 1. SIMULACIÓN DE ESCANEO QR
         qr_input = st.text_input("🔫 Escanear Código QR (ID del Activo):", placeholder="Ej: MOT-01").strip()
 
         equipo_encontrado = None
         lab_ubicacion = None
 
-        # Buscamos el equipo en la base de datos global (Ya cargada de Supabase)
-        if qr_input and 'db_laboratorios' in st.session_state:
+        # Buscamos el equipo
+        if qr_input and isinstance(st.session_state.db_laboratorios, dict):
             for lab, lista_equipos in st.session_state.db_laboratorios.items():
                 for eq in lista_equipos:
                     if eq.id_activo == qr_input:
@@ -73,7 +81,7 @@ class VistaInspeccion(Vista):
 
                         # --- BLOQUE VISIÓN ---
                         if foto_final:
-                            with st.spinner("🤖 Analizando imagen con IA..."):
+                            with st.spinner("Procesando evidencia..."):
                                 time.sleep(1.5)
                                 temp_filename = "temp_vision.jpg"
                                 with open(temp_filename, "wb") as f: f.write(foto_final.getbuffer())
@@ -90,9 +98,10 @@ class VistaInspeccion(Vista):
                                         
                                         dictamen_ia = f"IA: {resultado.get('diagnostico', 'Desconocido')}"
                                         
+                                        # La IA decide si cambia el estado o no
                                         if resultado.get('alerta') or "QUEMADURA" in str(resultado):
                                             equipo_encontrado.estado = EstadoEquipo.EN_MANTENIMIENTO
-                                            st.error("🚨 ¡LA IA DETECTÓ DAÑO CRÍTICO!")
+                                            
                                     else:
                                         dictamen_ia = "IA (Simulada): Posible desgaste térmico detectado."
                                 
@@ -101,7 +110,7 @@ class VistaInspeccion(Vista):
                                 finally:
                                     if os.path.exists(temp_filename): os.remove(temp_filename)
 
-                        # --- GUARDADO ---
+                        # --- GUARDADO EN HISTORIAL (Siempre se guarda) ---
                         detalle_log = f"Reportado por {usuario}: {descripcion}"
                         equipo_encontrado.registrar_incidencia(detalle_log)
                         ultimo_ticket = equipo_encontrado.historial_incidencias[-1]
@@ -109,11 +118,15 @@ class VistaInspeccion(Vista):
 
                         # --- PERSISTENCIA SUPABASE ---
                         repo = EquipoRepository()
-                        repo.actualizar_equipo(equipo_encontrado) # <--- AQUÍ GUARDAMOS
+                        repo.actualizar_equipo(equipo_encontrado)
 
                         st.success("✅ Reporte registrado y guardado en la Nube.")
+                        
+                        # --- LIMPIEZA DE MEMORIA PARA ACTUALIZAR EL DASHBOARD ---
                         st.session_state.trigger = st.session_state.get('trigger', 0) + 1
                         st.cache_data.clear()
+                        if 'db_laboratorios' in st.session_state:
+                            del st.session_state['db_laboratorios']
                         
         elif qr_input:
             st.error("❌ Código QR no encontrado en la base de datos.")

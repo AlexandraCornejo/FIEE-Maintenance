@@ -13,6 +13,7 @@ from src.logical.estrategias import DesgasteLineal, DesgasteExponencial
 from src.repositories.equipo_repository import EquipoRepository 
 from src.utils.enums import EstadoEquipo
 from src.services.vision_service import VisionService
+from src.services.predictive_service import PredictiveService # <--- NUEVO IMPORT IA
 
 # ==============================================================================
 # 0. CLASE PARA EQUIPOS GENÉRICOS
@@ -58,7 +59,7 @@ def convertir_objetos_a_df(_lista_equipos_dict, _trigger):
             })
     return pd.DataFrame(data)
 
-# --- CAMBIO 1: Función PDF Profesional (inyectada aquí) ---
+# --- Función PDF Profesional ---
 def generar_pdf(equipo, lab):
     pdf = FPDF()
     pdf.add_page()
@@ -117,7 +118,7 @@ class VistaDashboard(Vista):
         
         laboratorios_dict = {
             "Laboratorio de Control": [], "Laboratorio de Circuitos": [],
-            "Laboratorio de Máquinas": [], "Laboratorio de Telecom": [],
+            "Laboratorio de Máquinas": [],
             "Laboratorio FIEE": [] 
         } 
         
@@ -167,8 +168,6 @@ class VistaDashboard(Vista):
                     laboratorios_dict[ubicacion].append(nuevo_obj)
             except Exception: continue
         
-        # CAMBIO 2: NO borramos los vacíos aquí, para que funcione el menú de "Alta Inventario".
-        # Los filtraremos visualmente en la tabla.
         return laboratorios_dict
 
     def render(self):
@@ -191,7 +190,6 @@ class VistaDashboard(Vista):
 
         # 1. TABLA GENERAL
         with tab_tabla:
-            # CAMBIO 3: Lógica "Ver Todos" y filtro de vacíos visual
             labs_con_datos = [k for k, v in st.session_state.db_laboratorios.items() if len(v) > 0]
             
             if labs_con_datos:
@@ -203,7 +201,6 @@ class VistaDashboard(Vista):
                 if not df.empty:
                     df_show = df.drop(columns=["OBJ_REF"])
                     
-                    # Si no es "VER TODOS", filtramos
                     if filtro_lab != "🔍 VER TODOS":
                         df_show = df_show[df_show["Ubicación"] == filtro_lab]
                     
@@ -216,7 +213,6 @@ class VistaDashboard(Vista):
 
         # 2. GESTIÓN TÉCNICA
         with tab_detalle:
-            # Filtrar dropdown para mostrar solo labs con cosas
             labs_con_datos = [k for k, v in st.session_state.db_laboratorios.items() if len(v) > 0]
             
             if labs_con_datos:
@@ -224,7 +220,7 @@ class VistaDashboard(Vista):
                 equipo_list = st.session_state.db_laboratorios[sel_lab_gestion]
                 
                 idx = st.selectbox("Seleccionar Activo:", range(len(equipo_list)), 
-                                    format_func=lambda i: f"{equipo_list[i].modelo} ({equipo_list[i].id_activo})")
+                                   format_func=lambda i: f"{equipo_list[i].modelo} ({equipo_list[i].id_activo})")
                 eq_sel = equipo_list[idx]
                 
                 c1, c2 = st.columns([1, 1])
@@ -264,15 +260,28 @@ class VistaDashboard(Vista):
 
                 with c2:
                     obs = eq_sel.calcular_obsolescencia()
-                    st.metric("Nivel de Desgaste", f"{obs*100:.1f}%")
+                    st.metric("Nivel de Desgaste Actual", f"{obs*100:.1f}%")
                     st.progress(min(obs, 1.0))
                     
-                    # --- CAMBIO 4: BOTÓN PDF ---
-                    st.write("")
+                    st.markdown("---")
+                    st.markdown("#### 🔮 Predicción IA de Falla")
+                    
+                    # --- LÓGICA PREDICTIVA (ENTREGABLE 6) ---
+                    try:
+                        predictor = PredictiveService()
+                        fecha_estimada, grafico_fig = predictor.generar_prediccion(eq_sel)
+                        
+                        st.warning(f"⚠️ Fecha estimada de fallo crítico: **{fecha_estimada}**")
+                        st.pyplot(grafico_fig) # Se muestra el gráfico predictivo
+                    except Exception as e:
+                        st.error(f"No se pudo generar la predicción: {e}")
+                        st.info("Asegúrate de haber instalado scikit-learn y matplotlib en tu entorno.")
+                    # ----------------------------------------
+                    
+                    st.markdown("---")
                     if st.button("📄 Generar Reporte PDF", key=f"pdf_{eq_sel.id_activo}"):
                         pdf_bytes = generar_pdf(eq_sel, eq_sel.ubicacion)
                         st.download_button("⬇️ Descargar PDF", pdf_bytes, file_name=f"Reporte_{eq_sel.id_activo}.pdf", mime="application/pdf")
-                    # ---------------------------
 
                     with st.expander("Historial de Eventos", expanded=True):
                         for inc in eq_sel.historial_incidencias:
@@ -313,8 +322,7 @@ class VistaDashboard(Vista):
         # 4. ALTA INVENTARIO
         with tab_alta:
             st.subheader("➕ Nuevo Ingreso")
-            # Lista fija para asegurar que siempre haya opciones, incluso si la BD está vacía
-            LABS_POSIBLES = ["Laboratorio de Control", "Laboratorio de Circuitos", "Laboratorio de Máquinas", "Laboratorio de Telecom", "Laboratorio FIEE"]
+            LABS_POSIBLES = ["Laboratorio de Control", "Laboratorio de Circuitos", "Laboratorio de Máquinas", "Laboratorio FIEE"]
             
             c_lab, c_tipo = st.columns(2)
             lab_dest = c_lab.selectbox("Destino:", LABS_POSIBLES)
