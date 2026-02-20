@@ -13,7 +13,7 @@ from src.logical.estrategias import DesgasteLineal, DesgasteExponencial
 from src.repositories.equipo_repository import EquipoRepository 
 from src.utils.enums import EstadoEquipo
 from src.services.vision_service import VisionService
-from src.services.predictive_service import PredictiveService # <--- NUEVO IMPORT IA
+from src.services.predictive_service import PredictiveService
 
 # ==============================================================================
 # 0. CLASE PARA EQUIPOS GENÉRICOS

@@ -9,7 +9,7 @@ sys.path.append(os.getcwd())
 from src.models.concretos import Osciloscopio, Multimetro, MotorInduccion
 from src.logical.estrategias import DesgasteLineal, DesgasteExponencial
 # --- NUEVOS IMPORTS ---
-from src.repositories.equipo_repository import EquipoRepository 
+from src.repositories.equipo_repository import EquipoRepository
 from src.utils.mapper import map_json_to_object
 
 # 3. Imports de las Vistas (Frontend POO)
@@ -59,5 +59,4 @@ def main():
         vista_actual.render()
 
 if __name__ == "__main__":
-    main()
-    
+    main()                                                                                                     

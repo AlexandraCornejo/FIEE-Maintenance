@@ -4,7 +4,6 @@ from src.utils.enums import EstadoEquipo
 def map_json_to_object(data_list, estrategia_lineal, estrategia_exponencial):
     """
     Convierte una lista de diccionarios (JSON) a una lista de Objetos Concretos.
-    NO AGRUPA, solo convierte.
     """
     objetos_convertidos = []
     
@@ -16,7 +15,7 @@ def map_json_to_object(data_list, estrategia_lineal, estrategia_exponencial):
         nombre_est = item.get('estrategia_nombre', 'Lineal')
         est_obj = estrategia_lineal if 'Lineal' in nombre_est else estrategia_exponencial
         
-        # 2. Instanciar la clase concreta (SOLUCIÓN AL ERROR NameError)
+        # 2. Instanciar la clase concreta
         nuevo_obj = None 
         
         try:

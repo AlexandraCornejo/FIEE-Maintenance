@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 class EquipoRepository:
     def __init__(self):
-        # Cargamos las claves directamente para evitar errores de importación de otros archivos
+        
         load_dotenv()
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_KEY")
@@ -28,7 +28,7 @@ class EquipoRepository:
         if hasattr(equipo, 'ancho_banda'): detalles['ancho_banda'] = equipo.ancho_banda
         if hasattr(equipo, 'precision'): detalles['precision'] = equipo.precision
     
-    # --- CAMBIO AQUÍ: Usamos la ubicación que tiene el objeto ---
+
     # Si el objeto no tiene el atributo, por defecto usa 'Sin Ubicación'
         ubicacion_final = getattr(equipo, 'ubicacion', 'Sin Ubicación')
         datos_para_nube = {
