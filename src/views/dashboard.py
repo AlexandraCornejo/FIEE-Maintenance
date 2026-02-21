@@ -132,12 +132,6 @@ class VistaDashboard(Vista):
                 tipo = d.get('tipo_equipo', 'Equipo')
                 ubicacion = d.get('ubicacion', 'Laboratorio FIEE')
                 
-                # Auto-Corrección
-                if ubicacion == "Laboratorio FIEE":
-                    if "Motor" in tipo: ubicacion = "Laboratorio de Máquinas"
-                    elif "Osciloscopio" in tipo: ubicacion = "Laboratorio de Circuitos"
-                    elif "Multimetro" in tipo: ubicacion = "Laboratorio de Control"
-                
                 # Instanciación
                 est_nombre = d.get('estrategia_nombre', 'Lineal')
                 estrategia = est_expo if "Exponencial" in est_nombre else est_lineal
