@@ -157,7 +157,7 @@ class VistaDashboard(Vista):
             st.session_state.trigger = 0 
 
         tab_tabla, tab_detalle, tab_recup, tab_alta = st.tabs([
-            "📋 Inventario", "⚙️ Gestión Técnica", "🚑 Recuperación", "➕ Alta Inventario"
+            "📋 Inventario", "⚙️ Gestión Técnica", "🚑 Recuperación", "➕ Actualizar Inventario"
         ])
 
         # 1. TABLA GENERAL
@@ -298,10 +298,16 @@ class VistaDashboard(Vista):
             c_lab, c_tipo = st.columns(2)
             lab_dest = c_lab.selectbox("Destino:", LABS_POSIBLES)
             
-            opts = ["Otro / Genérico"]
-            if lab_dest == "Laboratorio de Máquinas": opts = ["MotorInduccion"] + opts
-            elif lab_dest == "Laboratorio de Circuitos": opts = ["Osciloscopio"] + opts
-            elif lab_dest == "Laboratorio de Control": opts = ["Multimetro"] + opts
+            equipos_por_lab = {
+                "Laboratorio de Circuitos": ["Osciloscopio", "Multimetro"],
+                "Laboratorio de Máquinas": ["MotorInduccion", "Multimetro"],
+                "Laboratorio de Control": ["Osciloscopio", "Multimetro", "MotorInduccion"],
+                "Laboratorio FIEE": ["MotorInduccion", "Osciloscopio", "Multimetro"]
+            }
+            
+            # Buscamos qué equipos le tocan al laboratorio seleccionado, 
+            # y le sumamos la opción genérica al final.
+            opts = equipos_por_lab.get(lab_dest, []) + ["Otro / Genérico"]
             
             tipo_sel = c_tipo.selectbox("Tipo:", opts, key=f"t_{lab_dest}")
             
