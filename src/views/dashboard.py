@@ -13,7 +13,11 @@ from src.logical.estrategias import DesgasteLineal, DesgasteExponencial
 from src.repositories.equipo_repository import EquipoRepository 
 from src.utils.enums import EstadoEquipo
 from src.services.vision_service import VisionService
-from src.services.predictive_service import PredictiveService # <--- NUEVO IMPORT IA
+from src.services.predictive_service import PredictiveService
+
+# --- NUEVOS IMPORTS PARA LA FACTORY Y EL MAPPER ---
+from src.utils.mapper import EquipoMapper
+from src.equipo_factory import EquipoFactory
 
 # ==============================================================================
 # 0. CLASE PARA EQUIPOS GENÉRICOS
@@ -127,47 +131,15 @@ class VistaDashboard(Vista):
 
         if not datos_raw: return laboratorios_dict
 
-        for d in datos_raw:
-            try:
-                tipo = d.get('tipo_equipo', 'Equipo')
-                ubicacion = d.get('ubicacion', 'Laboratorio FIEE')
-                
-                # Auto-Corrección
-                if ubicacion == "Laboratorio FIEE":
-                    if "Motor" in tipo: ubicacion = "Laboratorio de Máquinas"
-                    elif "Osciloscopio" in tipo: ubicacion = "Laboratorio de Circuitos"
-                    elif "Multimetro" in tipo: ubicacion = "Laboratorio de Control"
-                
-                # Instanciación
-                est_nombre = d.get('estrategia_nombre', 'Lineal')
-                estrategia = est_expo if "Exponencial" in est_nombre else est_lineal
-                
-                modelo = d.get('modelo', 'Genérico')
-                id_act = d.get('id_activo', '000')
-                fecha = d.get('fecha_compra', '2024-01-01')
-                det = d.get('detalles_tecnicos', {}) or {}
-                
-                nuevo_obj = None
-                if "Motor" in tipo:
-                    nuevo_obj = MotorInduccion(id_act, modelo, fecha, det.get('hp','5HP'), det.get('voltaje','220V'), det.get('rpm',1800), estrategia)
-                elif "Osciloscopio" in tipo:
-                    nuevo_obj = Osciloscopio(id_act, modelo, fecha, det.get('ancho_banda','50MHz'), estrategia)
-                elif "Multimetro" in tipo:
-                    nuevo_obj = Multimetro(id_act, modelo, fecha, det.get('precision','1%'), True, estrategia)
-                else:
-                    nuevo_obj = EquipoGenerico(id_act, modelo, fecha, det.get('descripcion', 'Varios'), estrategia)
+        mapper = EquipoMapper(est_lineal, est_expo)
+        equipos_lista = mapper.mapear_lista(datos_raw)
 
-                if nuevo_obj:
-                    nuevo_obj.historial_incidencias = d.get('historial_incidencias', [])
-                    estado_str = d.get('estado', 'OPERATIVO')
-                    if hasattr(EstadoEquipo, estado_str):
-                        nuevo_obj.estado = getattr(EstadoEquipo, estado_str)
-                    
-                    nuevo_obj.ubicacion = ubicacion 
-                    if ubicacion not in laboratorios_dict: laboratorios_dict[ubicacion] = []
-                    laboratorios_dict[ubicacion].append(nuevo_obj)
-            except Exception: continue
-        
+        for equipo in equipos_lista:
+            ubicacion = getattr(equipo, 'ubicacion', 'Laboratorio FIEE')
+            if ubicacion not in laboratorios_dict: 
+                laboratorios_dict[ubicacion] = []
+            laboratorios_dict[ubicacion].append(equipo)
+            
         return laboratorios_dict
 
     def render(self):
@@ -185,7 +157,7 @@ class VistaDashboard(Vista):
             st.session_state.trigger = 0 
 
         tab_tabla, tab_detalle, tab_recup, tab_alta = st.tabs([
-            "📋 Inventario", "⚙️ Gestión Técnica", "🚑 Recuperación", "➕ Alta Inventario"
+            "📋 Inventario", "⚙️ Gestión Técnica", "🚑 Recuperación", "➕ Actualizar Inventario"
         ])
 
         # 1. TABLA GENERAL
@@ -266,7 +238,6 @@ class VistaDashboard(Vista):
                     st.markdown("---")
                     st.markdown("#### 🔮 Predicción IA de Falla")
                     
-                    # --- LÓGICA PREDICTIVA (ENTREGABLE 6) ---
                     try:
                         predictor = PredictiveService()
                         fecha_estimada, grafico_fig = predictor.generar_prediccion(eq_sel)
@@ -327,26 +298,65 @@ class VistaDashboard(Vista):
             c_lab, c_tipo = st.columns(2)
             lab_dest = c_lab.selectbox("Destino:", LABS_POSIBLES)
             
-            opts = ["Otro / Genérico"]
-            if lab_dest == "Laboratorio de Máquinas": opts = ["MotorInduccion"] + opts
-            elif lab_dest == "Laboratorio de Circuitos": opts = ["Osciloscopio"] + opts
-            elif lab_dest == "Laboratorio de Control": opts = ["Multimetro"] + opts
+            equipos_por_lab = {
+                "Laboratorio de Circuitos": ["Osciloscopio", "Multimetro"],
+                "Laboratorio de Máquinas": ["MotorInduccion", "Multimetro"],
+                "Laboratorio de Control": ["Osciloscopio", "Multimetro", "MotorInduccion"],
+                "Laboratorio FIEE": ["MotorInduccion", "Osciloscopio", "Multimetro"]
+            }
+            
+            # Buscamos qué equipos le tocan al laboratorio seleccionado, 
+            # y le sumamos la opción genérica al final.
+            opts = equipos_por_lab.get(lab_dest, []) + ["Otro / Genérico"]
             
             tipo_sel = c_tipo.selectbox("Tipo:", opts, key=f"t_{lab_dest}")
             
             with st.form("alta"):
                 m = st.text_input("Modelo")
                 f = st.date_input("Fecha")
-                extra = st.text_input("Detalle Extra") if "Genérico" in tipo_sel else ""
                 
+                # --- CAMPOS DINÁMICOS SEGÚN EL TIPO DE EQUIPO ---
+                st.markdown("**Especificaciones Técnicas**")
+                
+                # Variables por defecto para capturar los datos
+                hp_in, volt_in, rpm_in = "", "", 0
+                ancho_in = ""
+                prec_in = ""
+                extra_in = ""
+
+                if "Motor" in tipo_sel:
+                    col1, col2, col3 = st.columns(3)
+                    hp_in = col1.text_input("Potencia (ej. 5HP)", value="5HP")
+                    volt_in = col2.text_input("Voltaje (ej. 220V)", value="220V")
+                    rpm_in = col3.number_input("RPM", min_value=0, value=1800)
+                elif "Osciloscopio" in tipo_sel:
+                    ancho_in = st.text_input("Ancho de Banda (ej. 100MHz)", value="100MHz")
+                elif "Multimetro" in tipo_sel:
+                    prec_in = st.text_input("Precisión (ej. 1%)", value="1%")
+                else:
+                    extra_in = st.text_input("Descripción o Detalle Extra")
+                
+                # --- BOTÓN DE GUARDAR ---
                 if st.form_submit_button("Guardar"):
                     nid = f"EQ-{random.randint(1000,9999)}"
                     f_s = f.strftime("%Y-%m-%d")
                     new = None
-                    if "Motor" in tipo_sel: new = MotorInduccion(nid, m, f_s, "5HP", "220V", 1800, st.session_state.est_lineal)
-                    elif "Osciloscopio" in tipo_sel: new = Osciloscopio(nid, m, f_s, "100MHz", st.session_state.est_lineal)
-                    elif "Multimetro" in tipo_sel: new = Multimetro(nid, m, f_s, "1%", True, st.session_state.est_lineal)
-                    else: new = EquipoGenerico(nid, m, f_s, extra, st.session_state.est_lineal)
+                    
+                    item_data = {"id_activo": nid, "modelo": m, "fecha_compra": f_s}
+                    detalles_data = {}
+                    
+                    # Armamos los detalles con lo que el usuario escribió en el formulario
+                    if "Motor" in tipo_sel:
+                        detalles_data = {"hp": hp_in, "voltaje": volt_in, "rpm": rpm_in}
+                        new = EquipoFactory.crear_equipo("MotorInduccion", item_data, detalles_data, st.session_state.est_lineal)
+                    elif "Osciloscopio" in tipo_sel:
+                        detalles_data = {"ancho_banda": ancho_in}
+                        new = EquipoFactory.crear_equipo("Osciloscopio", item_data, detalles_data, st.session_state.est_lineal)
+                    elif "Multimetro" in tipo_sel:
+                        detalles_data = {"precision": prec_in, "es_digital": True}
+                        new = EquipoFactory.crear_equipo("Multimetro", item_data, detalles_data, st.session_state.est_lineal)
+                    else: 
+                        new = EquipoGenerico(nid, m, f_s, extra_in, st.session_state.est_lineal)
                     
                     new.ubicacion = lab_dest
                     EquipoRepository().guardar_equipo(new)

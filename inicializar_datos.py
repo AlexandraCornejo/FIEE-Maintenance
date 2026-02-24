@@ -11,22 +11,22 @@ def cargar_ejemplos():
     # --- DATOS DE EJEMPLO ORGANIZADOS POR LABORATORIO ---
     
     # 1. Laboratorio de Control
-    m1 = MotorInduccion("MOT-C-01", "Siemens 1LE1", "2023-05-10", "5HP", "220V", 1800, estrategia_base)
-    m1.ubicacion = "Laboratorio de Control" # Forzamos la ubicación
-    
-    o1 = Osciloscopio("OSC-C-01", "Tektronix TBS1052", "2022-08-15", "50MHz", estrategia_base)
-    o1.ubicacion = "Laboratorio de Control"
+    mu1 = Multimetro("FLU-01", "Fluke 87V", "2024-01-20", "0.05%", True, estrategia_base)
+    mu1.ubicacion = "Laboratorio de Control"
 
     # 2. Laboratorio de Circuitos
-    mu1 = Multimetro("FLU-01", "Fluke 87V", "2024-01-20", "0.05%", True, estrategia_base)
-    mu1.ubicacion = "Laboratorio de Circuitos"
     
     o2 = Osciloscopio("OSC-Cir-02", "Keysight EDUX1002A", "2023-11-05", "70MHz", estrategia_base)
     o2.ubicacion = "Laboratorio de Circuitos"
 
+    o1 = Osciloscopio("OSC-C-01", "Tektronix TBS1052", "2022-08-15", "50MHz", estrategia_base)
+    o1.ubicacion = "Laboratorio de Circuitos"
     # 3. Laboratorio de Máquinas (Potencia)
     m2 = MotorInduccion("MOT-P-02", "WEG W22", "2021-03-10", "10HP", "440V", 3600, estrategia_base)
     m2.ubicacion = "Laboratorio de Máquinas"
+
+    m1 = MotorInduccion("MOT-C-01", "Siemens 1LE1", "2023-05-10", "5HP", "220V", 1800, estrategia_base)
+    m1.ubicacion = "Laboratorio de Máquinas" # Forzamos la ubicación
     # Simulamos un desgaste avanzado en este
     m2.historial_incidencias.append({"fecha": "2024-02-01", "detalle": "Ruido en rodamientos"})
 

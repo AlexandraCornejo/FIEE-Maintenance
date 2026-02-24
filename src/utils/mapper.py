@@ -1,56 +1,61 @@
-from src.models.concretos import MotorInduccion, Osciloscopio, Multimetro
+from src.equipo_factory import EquipoFactory
 from src.utils.enums import EstadoEquipo
 
-def map_json_to_object(data_list, estrategia_lineal, estrategia_exponencial):
+class EquipoMapper:
     """
-    Convierte una lista de diccionarios (JSON) a una lista de Objetos Concretos.
-    NO AGRUPA, solo convierte.
+    Implementación del patrón Data Mapper.
+    Se encarga de transformar diccionarios JSON a objetos de dominio de la FIEE.
     """
-    objetos_convertidos = []
     
-    for item in data_list:
-        tipo = item.get('tipo_equipo')
-        detalles = item.get('detalles_tecnicos', {})
+    def __init__(self, estrategia_lineal, estrategia_exponencial):
+        # Inyectamos las estrategias al instanciar la clase
+        self.estr_lineal = estrategia_lineal
+        self.estr_expo = estrategia_exponencial
+
+    def mapear_lista(self, data_list):
+        """
+        Recibe una lista de diccionarios y devuelve una lista de objetos.
+        """
+        objetos_convertidos = []
         
-        # 1. Recuperar estrategia
-        nombre_est = item.get('estrategia_nombre', 'Lineal')
-        est_obj = estrategia_lineal if 'Lineal' in nombre_est else estrategia_exponencial
-        
-        # 2. Instanciar la clase concreta (SOLUCIÓN AL ERROR NameError)
-        nuevo_obj = None 
-        
-        try:
-            if tipo == 'MotorInduccion':
-                nuevo_obj = MotorInduccion(
-                    item['id_activo'], item['modelo'], item['fecha_compra'], 
-                    detalles.get('hp'), detalles.get('voltaje'), detalles.get('rpm'), 
-                    est_obj
-                )
-            elif tipo == 'Osciloscopio':
-                nuevo_obj = Osciloscopio(
-                    item['id_activo'], item['modelo'], item['fecha_compra'], 
-                    detalles.get('ancho_banda'), est_obj
-                )
-            elif tipo == 'Multimetro':
-                nuevo_obj = Multimetro(
-                    item['id_activo'], item['modelo'], item['fecha_compra'], 
-                    detalles.get('precision'), detalles.get('es_digital', True), est_obj
-                )
-            
-            # 3. Si se creó correctamente, llenar datos comunes
+        for item in data_list:
+            nuevo_obj = self._mapear_item(item)
             if nuevo_obj:
-                nuevo_obj.ubicacion = item.get('ubicacion', 'Sin Asignar') # IMPORTANTE PARA EL DASHBOARD
-                
-                # Convertir string a Enum de forma segura
-                estado_str = item.get('estado', 'OPERATIVO')
-                if hasattr(EstadoEquipo, estado_str):
-                    nuevo_obj.estado = getattr(EstadoEquipo, estado_str)
-                
-                nuevo_obj.historial_incidencias = item.get('historial_incidencias', [])
                 objetos_convertidos.append(nuevo_obj)
                 
-        except Exception as e:
-            print(f"Error mapeando objeto {item.get('id_activo')}: {e}")
-            continue
+        return objetos_convertidos
 
-    return objetos_convertidos
+    def _mapear_item(self, item):
+        """
+        Método privado que encapsula la lógica de convertir UN solo elemento.
+        """
+        tipo = item.get("tipo_equipo")
+        detalles = item.get("detalles_tecnicos", {})
+
+        # Selección de estrategia usando las propiedades inyectadas
+        nombre_est = item.get("estrategia_nombre", "Lineal")
+        est_obj = self.estr_lineal if "Lineal" in nombre_est else self.estr_expo
+
+        try:
+            # Uso de nuestro Factory
+            nuevo_obj = EquipoFactory.crear_equipo(
+                tipo,
+                item,
+                detalles,
+                est_obj
+            )
+
+            # Asignación de datos comunes a todos los equipos
+            nuevo_obj.ubicacion = item.get("ubicacion", "Sin Asignar")
+
+            estado_str = item.get("estado", "OPERATIVO")
+            if hasattr(EstadoEquipo, estado_str):
+                nuevo_obj.estado = getattr(EstadoEquipo, estado_str)
+
+            nuevo_obj.historial_incidencias = item.get("historial_incidencias", [])
+
+            return nuevo_obj
+
+        except Exception as e:
+            print(f"❌ Error mapeando objeto {item.get('id_activo')}: {e}")
+            return None
