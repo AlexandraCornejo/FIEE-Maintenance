@@ -1,48 +1,81 @@
-import cv2
-import numpy as np
+import os
+import io
+import torch
+import torch.nn.functional as F
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 class VisionService:
-    def analizar_quemadura(self, image_path_or_buffer):
-        """
-        Versión V2.2: Con bandera booleana para evitar confusiones en el Dashboard.
-        """
+    """
+    Servicio de Visión Computacional conectado a Hugging Face en la nube.
+    """
+    def __init__(self):
+        """Constructor: Inicializa el cerebro de visión artificial."""
+        # Repositorio de Hugging Face
+        self.__model_path = "NahilSisai/vit-mantenimiento-fiee" 
+        
+        self.processor = None
+        self.model = None
+        self.modelo_cargado = False
+        
+        print("\n" + "="*50)
+        print(f"🚀 [VISION SERVICE] Conectando con IA en la nube...")
+        self.__cargar_modelo()
+        print("="*50 + "\n")
+
+    def __cargar_modelo(self):
+        """Descarga/Carga los pesos y el procesador desde Hugging Face."""
+        print(f"🔍 Repositorio objetivo: {self.__model_path}")
+        
         try:
-            # 1. Cargar la imagen (Tu lógica original)
-            if hasattr(image_path_or_buffer, 'read'): 
-                # Resetear el puntero del archivo por si acaso se leyó antes
-                image_path_or_buffer.seek(0)
-                file_bytes = np.asarray(bytearray(image_path_or_buffer.read()), dtype=np.uint8)
-                img = cv2.imdecode(file_bytes, 1)
-            else:
-                img = cv2.imread(image_path_or_buffer)
-
-            if img is None:
-                return {"alerta": "ERROR", "diagnostico": "Imagen no legible", "es_critico": False}
-
-            # 2. Procesamiento (Tu lógica original)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Umbral ajustado a 45 como pediste
-            umbral_oscuridad = 45 
-            
-            pixeles_totales = gray.size
-            pixeles_oscuros = np.count_nonzero(gray < umbral_oscuridad)
-            
-            porcentaje_quemado = (pixeles_oscuros / pixeles_totales) * 100
-
-            # 3. Decisión (AQUÍ ESTÁ LA CLAVE)
-            if porcentaje_quemado > 25.0:
-                return {
-                    "alerta": "🚨 ALERTA CRÍTICA",
-                    "diagnostico": f"Zona CARBONIZADA detectada ({porcentaje_quemado:.1f}%).",
-                    "es_critico": True  # <--- ESTO ES LO QUE NECESITAMOS (SEMÁFORO ROJO)
-                }
-            else:
-                return {
-                    "alerta": "✅ ESTADO NORMAL",
-                    "diagnostico": f"Superficie limpia ({porcentaje_quemado:.1f}% oscuridad).",
-                    "es_critico": False # <--- ESTO ES LO QUE NECESITAMOS (SEMÁFORO VERDE)
-                }
-
+            # from_pretrained ahora buscará en internet en lugar de tu disco duro
+            self.processor = AutoImageProcessor.from_pretrained(self.__model_path)
+            self.model = AutoModelForImageClassification.from_pretrained(self.__model_path)
+            self.modelo_cargado = True
+            print("✅ Modelo cargado exitosamente desde la nube.")
         except Exception as e:
-            return {"alerta": "ERROR", "diagnostico": f"Fallo IA: {str(e)}", "es_critico": False}
+            print(f"❌ Error al conectar con Hugging Face: {e}")
+
+    def analizar_estado(self, datos_imagen):
+        """Realiza la inferencia sobre una imagen."""
+        if not self.modelo_cargado:
+            return self.__respuesta_error("IA no disponible. Verifique conexión a internet.")
+        try:
+            imagen = self.__preprocesar(datos_imagen)
+            inputs = self.processor(images=imagen, return_tensors="pt")
+            
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probabilidades = F.softmax(outputs.logits, dim=-1)[0]
+                clase_idx = outputs.logits.argmax(-1).item()
+            
+            confianza = probabilidades[clase_idx].item() * 100
+            etiqueta_raw = self.model.config.id2label[clase_idx]
+            
+            return self.__procesar_diagnostico(etiqueta_raw, confianza)
+        except Exception as e:
+            return self.__respuesta_error(str(e))
+
+    def analizar_quemadura(self, datos_imagen):
+        return self.analizar_estado(datos_imagen)
+
+    def __preprocesar(self, data):
+        if hasattr(data, 'read'):
+            data.seek(0)
+            return Image.open(io.BytesIO(data.read())).convert("RGB")
+        return Image.open(data).convert("RGB")
+
+    def __procesar_diagnostico(self, etiqueta: str, confianza: float):
+        etiqueta_clean = etiqueta.lower()
+        palabras_falla = ["quemado", "danado", "damaged", "burned", "roto", "broken", "falla"]
+        
+        es_anomalo = any(falla in etiqueta_clean for falla in palabras_falla)
+        
+        return {
+            "diagnostico": "ANOMALÍA DETECTADA" if es_anomalo else "OK: DENTRO DE PARAMETROS NORMALES",
+            "detalle": f"Clasificación: {etiqueta.title()} ({confianza:.1f}%)",
+            "alerta": es_anomalo
+        }
+
+    def __respuesta_error(self, msj):
+        return {"diagnostico": "ERROR", "detalle": msj, "alerta": False}

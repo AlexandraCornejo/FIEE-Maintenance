@@ -1,9 +1,11 @@
 import streamlit as st
 import time
 import os
+from datetime import datetime, timedelta
 from src.views.base_view import Vista
 from src.utils.enums import EstadoEquipo
 from src.repositories.equipo_repository import EquipoRepository # <--- NUEVO
+from src.utils.reporte_builder import ReporteBuilder # <--- NUEVO: Entregable 7
 
 try:
     from src.services.vision_service import VisionService
@@ -62,7 +64,7 @@ class VistaInspeccion(Vista):
             # 3. FORMULARIO DE REPORTE DE AVERÍA
             st.subheader("🚨 Reportar Incidencia")
             
-            with st.form("form_reporte"):
+            with st.form("mi_formulario"):
                 usuario = st.text_input("Tu Nombre / Código:", "Estudiante-01")
                 descripcion = st.text_area("Descripción del problema:", placeholder="El equipo hace un ruido extraño...")
                 st.write("📸 **Evidencia Visual (Opcional)**")
@@ -72,7 +74,7 @@ class VistaInspeccion(Vista):
                 
                 enviar = st.form_submit_button("📢 Enviar Reporte")
 
-                if enviar:
+            if enviar:
                     if not descripcion:
                         st.warning("⚠️ Por favor describe el problema.")
                     else:
@@ -89,21 +91,28 @@ class VistaInspeccion(Vista):
                                 try:
                                     if VisionService:
                                         servicio = VisionService()
-                                        if hasattr(servicio, 'analizar_quemadura'):
-                                            resultado = servicio.analizar_quemadura(temp_filename)
-                                        elif hasattr(servicio, 'analizar_imagen'):
-                                            resultado = servicio.analizar_imagen(temp_filename)
-                                        else:
-                                            resultado = {"diagnostico": "Error de Método", "alerta": False}
+                                        # Llamamos a la IA
+                                        resultado = servicio.analizar_estado(foto_final)
                                         
-                                        dictamen_ia = f"IA: {resultado.get('diagnostico', 'Desconocido')}"
+                                        # Extraemos los datos de forma segura con .get()
+                                        diag = resultado.get('diagnostico', 'Sin diagnóstico')
+                                        det = resultado.get('detalle', '')
+                                        alerta = resultado.get('alerta', False)
                                         
-                                        # La IA decide si cambia el estado o no
-                                        if resultado.get('alerta') or "QUEMADURA" in str(resultado):
+                                        # Armamos el texto final
+                                        diagnostico_ia = str(diag).upper()
+                                        dictamen_ia = f"IA: {diagnostico_ia} - {det}"
+                                        
+                                        diagnostico_ia = str(resultado.get('diagnostico', '')).upper()
+                                        if resultado.get('es_critico'):
+                                            equipo_encontrado.estado = EstadoEquipo.FALLA
+                                        elif "ANOMAL" in diagnostico_ia:
                                             equipo_encontrado.estado = EstadoEquipo.EN_MANTENIMIENTO
+                                        EquipoRepository().actualizar_equipo(equipo_encontrado)
+                                        st.session_state.trigger = 1
                                             
                                     else:
-                                        dictamen_ia = "IA (Simulada): Posible desgaste térmico detectado."
+                                        dictamen_ia = "IA no conectada."
                                 
                                 except Exception as e:
                                     dictamen_ia = f"Error en IA: {str(e)}"
@@ -115,12 +124,54 @@ class VistaInspeccion(Vista):
                         equipo_encontrado.registrar_incidencia(detalle_log)
                         ultimo_ticket = equipo_encontrado.historial_incidencias[-1]
                         ultimo_ticket['dictamen_ia'] = dictamen_ia
+                        
+                        if equipo_encontrado.verificar_umbral_quejas():
+                            st.error("🚨 LÍMITE ALCANZADO: El equipo ha recibido 3 reportes recientes y pasará a Mantenimiento Automático.")
+                            time.sleep(4)
 
+                        # --- PERSISTENCIA SUPABASE ---
+                        repo = EquipoRepository()
+                        repo.actualizar_equipo(equipo_encontrado)
                         # --- PERSISTENCIA SUPABASE ---
                         repo = EquipoRepository()
                         repo.actualizar_equipo(equipo_encontrado)
 
                         st.success("✅ Reporte registrado y guardado en la Nube.")
+
+                        # --- ENTREGABLE 7: GENERACIÓN DEL PDF TIPO TICKET ---
+                        try:
+                            # 1. Construimos el PDF en RAM
+                            builder = ReporteBuilder()
+                            builder.agregar_titulo("TICKET DE REPORTE - ESTUDIANTE")
+                            texto_ia_pdf = dictamen_ia[:55] + "..." if len(dictamen_ia) > 55 else dictamen_ia
+                            datos_ticket = {
+                                "ID Activo": equipo_encontrado.id_activo,
+                                "Equipo": equipo_encontrado.modelo,
+                                "Ubicación": lab_ubicacion,
+                                "Reportado por": usuario,
+                                "Descripción": descripcion,
+                                "Diagnóstico IA": texto_ia_pdf
+                            }
+                            builder.agregar_cuerpo(datos_ticket)
+                            
+                            # Mensaje de cierre
+                            builder.pdf.set_font("helvetica", "I", 10)
+                            builder.pdf.cell(0, 10, "Este comprobante confirma el registro de su reporte. Gracias por ayudar a la FIEE.", new_x="LMARGIN", new_y="NEXT")
+                            
+                            # 2. Obtenemos los bytes del archivo
+                            pdf_bytes = builder.compilar_pdf()
+                            
+                            # 3. Mostramos el botón de descarga
+                            st.download_button(
+                                label="⬇️ Descargar Comprobante de Reporte (PDF)",
+                                data=pdf_bytes,
+                                file_name=f"Comprobante_{equipo_encontrado.id_activo}.pdf",
+                                mime="application/pdf",
+                                type="primary"
+                            )
+                        except Exception as e:
+                            st.error(f"Error al generar el PDF: {e}")
+                        # ---------------------------------------------------
                         
                         # --- LIMPIEZA DE MEMORIA PARA ACTUALIZAR EL DASHBOARD ---
                         st.session_state.trigger = st.session_state.get('trigger', 0) + 1

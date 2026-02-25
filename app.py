@@ -1,9 +1,12 @@
 import streamlit as st
 import sys
 import os
+#1.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-# 1. Configuración de Rutas
-sys.path.append(os.getcwd())
+from supabase import create_client
 
 # 2. Imports del Modelo (Backend)
 from src.models.concretos import Osciloscopio, Multimetro, MotorInduccion
@@ -22,21 +25,32 @@ st.set_page_config(page_title="FIEE Maintenance OOP", page_icon="🏭", layout="
 # ==============================================================================
 class ServicioAutenticacion:
     def __init__(self):
-        self.usuarios_permitidos = {
-            "admin": "fiee123",
-            "profesor": "uni2024"
-        }
+        # Conectamos a Supabase usando los secretos seguros
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        self.supabase = create_client(url, key)
 
     def autenticar(self, usuario, contrasena):
-        if self.usuarios_permitidos.get(usuario) == contrasena:
-            st.session_state["autenticado"] = True
-            st.session_state["usuario_actual"] = usuario
-            return True
-        return False
+        try:
+            # Consultamos a la tabla 'usuarios' que acabas de crear
+            respuesta = self.supabase.table("usuarios").select("*").eq("correo", usuario).eq("contrasena", contrasena).execute()
+            
+            # Si la lista de datos trae algo, el usuario y contraseña son correctos
+            if len(respuesta.data) > 0: 
+                datos_usuario = respuesta.data[0]
+                st.session_state["autenticado"] = True
+                st.session_state["usuario_actual"] = datos_usuario["correo"]
+                st.session_state["rol_actual"] = datos_usuario["rol"] # Guardamos si es estudiante o docente
+                return True
+            return False
+        except Exception as e:
+            st.error(f"Error de conexión con la base de datos: {e}")
+            return False
 
     def cerrar_sesion(self):
         st.session_state["autenticado"] = False
         st.session_state["usuario_actual"] = None
+        st.session_state["rol_actual"] = None
 
     def esta_autenticado(self):
         return st.session_state.get("autenticado", False)
@@ -49,7 +63,7 @@ class VistaLogin:
         c1, c2, c3 = st.columns([1, 1, 1])
         with c2:
             st.title("🔒 Acceso Restringido")
-            st.markdown("Área exclusiva para Docentes y Administradores.")
+            st.markdown("Ingrese su credencial")
             
             with st.form("form_login"):
                 usuario = st.text_input("👤 Usuario")
@@ -60,7 +74,7 @@ class VistaLogin:
                     if self.servicio_auth.autenticar(usuario, contrasena):
                         st.rerun()
                     else:
-                        st.error("❌ Credenciales incorrectas. Intente de nuevo.")
+                        st.error("Credenciales incorrectas. Intente de nuevo.")
 
 # ==============================================================================
 # 2. CONTROLADOR PRINCIPAL DE LA APLICACIÓN (NUEVO)
@@ -85,31 +99,47 @@ class AplicacionFIEE:
                 mapper = EquipoMapper(st.session_state.est_lineal, st.session_state.est_expo)
                 st.session_state.db_laboratorios = mapper.mapear_lista(datos_crudos)
             else:
-                st.warning("⚠️ Base de datos vacía o desconectada. Iniciando vacío.")
+                st.warning("Base de datos vacía o desconectada. Iniciando vacío.")
                 st.session_state.db_laboratorios = {}
 
     def ejecutar(self):
         """Dibuja la interfaz principal y aplica el polimorfismo de las vistas."""
         with st.sidebar:
-            st.title("Sistema FIEE")
+            st.title("🏭 Sistema FIEE")
             st.info("Sistema de Gestión de Activos v1.0")
-            opcion = st.radio("Seleccione Perfil:", ["Estudiante / Técnico", "Docente / Admin"])
 
         vista_actual = None
 
-        if opcion == "Estudiante / Técnico":
-            vista_actual = VistaInspeccion()
-
-        elif opcion == "Docente / Admin":
-            if not self.servicio_auth.esta_autenticado():
-                vista_actual = VistaLogin(self.servicio_auth)
-            else:
-                with st.sidebar:
-                    st.success(f"👤 Conectado como: **{st.session_state.get('usuario_actual')}**")
-                    if st.button("🚪 Cerrar Sesión", use_container_width=True):
-                        self.servicio_auth.cerrar_sesion()
-                        st.rerun()
+        # 1. EL CANDADO PRINCIPAL
+        if not self.servicio_auth.esta_autenticado():
+            vista_actual = VistaLogin(self.servicio_auth)
+        
+        # 2. SI YA INICIÓ SESIÓN: Mostramos menú según su ROL
+        else:
+            with st.sidebar:
+                # Obtenemos el rol que guardamos desde Supabase
+                rol_usuario = st.session_state.get('rol_actual', 'estudiante')
                 
+                st.success(f"👤 Usuario: **{st.session_state.get('usuario_actual')}**\n\n🛡️ Rol: **{rol_usuario.capitalize()}**")
+                
+                # LA MAGIA DE LOS ROLES: Definimos qué puede ver cada quien
+                if rol_usuario == "docente":
+                    # El profe puede ver ambas cosas
+                    opciones_menu = ["Dashboard (Docentes/Admin)", "Inspección (Estudiantes/Técnicos)"]
+                else: 
+                    # El estudiante o trabajador SOLO ve inspección
+                    opciones_menu = ["Inspección (Estudiantes/Técnicos)"]
+                
+                opcion = st.radio("Navegación:", opciones_menu)
+                
+                if st.button("Cerrar Sesión", use_container_width=True):
+                    self.servicio_auth.cerrar_sesion()
+                    st.rerun()
+
+            # 3. Dirigimos a la vista según la opción seleccionada
+            if opcion == "Inspección (Estudiantes/Técnicos)":
+                vista_actual = VistaInspeccion()
+            elif opcion == "Dashboard (Docentes/Admin)":
                 vista_actual = VistaDashboard()
 
         # Polimorfismo puro
